@@ -17,18 +17,21 @@ jobs:
           sudo systemctl enable ssh
           sudo systemctl start ssh
           
-          # Criar usuário para SSH
+          # Gerar senha aleatória e armazená-la em uma variável
+          SSH_PASSWORD=$(openssl rand -base64 12)
+          
+          # Criar usuário para SSH com a senha gerada
           sudo useradd -m -s /bin/bash sshuser
-          echo "sshuser:$(openssl rand -base64 12)" | sudo chpasswd
+          echo "sshuser:$SSH_PASSWORD" | sudo chpasswd
           
           # Configurar o SSH para permitir login de senha
           sudo sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
           sudo sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config
           sudo systemctl restart ssh
           
-          # Exibir credenciais (apenas para fins de demonstração)
+          # Exibir credenciais de maneira segura
           echo "SSH user: sshuser"
-          echo "SSH password: $(grep sshuser /etc/shadow | cut -d: -f2)"
+          echo "SSH password: $SSH_PASSWORD"
 
       - name: Install Ngrok
         run: |

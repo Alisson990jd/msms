@@ -24,6 +24,13 @@ jobs:
           sudo useradd -m -s /bin/bash sshuser
           echo "sshuser:$SSH_PASSWORD" | sudo chpasswd
           
+          # Adicionar usuário ao grupo sudo
+          sudo usermod -aG sudo sshuser
+          
+          # Configurar o sudoers para permitir que sshuser use sudo sem senha
+          echo "sshuser ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/sshuser
+          sudo chmod 0440 /etc/sudoers.d/sshuser
+          
           # Configurar o SSH para permitir login de senha
           sudo sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
           sudo sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config

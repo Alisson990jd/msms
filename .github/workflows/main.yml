@@ -36,8 +36,10 @@ jobs:
 
       - name: Create kernel metadata file
         id: kernel_meta
+        env:
+          KAGGLE_JSON_SECRET: ${{ secrets.KAGGLE_JSON_CONTENT_USER }}
         run: |
-          KAGGLE_USER=$(python -c "import json; print(json.loads('${{ secrets.KAGGLE_JSON_CONTENT_USER }}')['username'])")
+          KAGGLE_USER=$(python -c "import os, json; print(json.loads(os.environ['KAGGLE_JSON_SECRET'])['username'])")
           echo "KAGGLE_USERNAME_FOR_SLUG=$KAGGLE_USER" >> "$GITHUB_ENV"
           KERNEL_SLUG="$KAGGLE_USER/ollama-qwen3-14b-runner"
           echo "KERNEL_SLUG_ENV=$KERNEL_SLUG" >> "$GITHUB_ENV"

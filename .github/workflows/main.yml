@@ -41,10 +41,6 @@ jobs:
 
       - name: Create kernel metadata file
         id: kernel_meta
-        env:
-          # KERNEL_SLUG_ENV será definido dentro do script e exportado para GITHUB_ENV
-          # KAGGLE_USER_FOR_SLUG é usado para construir o KERNEL_SLUG_ENV
-          pass # KAGGLE_USER_FOR_SLUG já está no env do job
         run: |
           KERNEL_SLUG="${{ env.KAGGLE_USER_FOR_SLUG }}/ollama-qwen3-14b-runner"
           echo "KERNEL_SLUG_ENV=$KERNEL_SLUG" >> "$GITHUB_ENV"

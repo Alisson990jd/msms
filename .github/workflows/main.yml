@@ -1,8 +1,6 @@
 name: Deploy Qwen3 14B with OpenManus
-
 on:
   workflow_dispatch:
-
 jobs:
   deploy_ollama_and_openmanus:
     runs-on: ubuntu-latest
@@ -12,28 +10,23 @@ jobs:
       NGROK_AUTHTOKEN: "1vgZrCA9yJDURy3OK1gNbS2G610_3CX2e2bqT4Ee88uMBk5he"
       KAGGLE_USERNAME: "bgzinn"
       KAGGLE_KEY: "55824846e3fff4618538582c58e4969a"
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.10"
           cache: pip
-
       - name: Install dependencies
         run: |
           pip install kaggle requests jupyter nbformat
-
       - name: Configure Kaggle credentials
         run: |
           mkdir -p ~/.kaggle
-          echo "{\"username\":\"${{ env.KAGGLE_USERNAME }}\",\"key\":\"${{ env.KAGGLE_KEY }}\"}" > ~/.kaggle/kaggle.json
+          echo '{"username":"'"${KAGGLE_USERNAME}"'","key":"'"${KAGGLE_KEY}"'"}' > ~/.kaggle/kaggle.json
           chmod 600 ~/.kaggle/kaggle.json
           echo "Configured Kaggle credentials"
-
       - name: Create Ollama Kaggle Notebook
         run: |
           cat > ollama_kaggle_runner.ipynb << 'EOF'
@@ -43,7 +36,8 @@ jobs:
    "cell_type": "markdown",
    "metadata": {},
    "source": [
-    "# Ollama Qwen3 14B Runner\n",
+    "# Ollama Qwen3 14B Runner
+",
     "This notebook sets up Ollama with Qwen3 14B model and exposes it via ngrok."
    ]
   },
@@ -52,7 +46,8 @@ jobs:
    "execution_count": null,
    "metadata": {},
    "source": [
-    "# Install required packages\n",
+    "# Install required packages
+",
     "!pip install pyngrok requests"
    ]
   },
@@ -61,8 +56,9 @@ jobs:
    "execution_count": null,
    "metadata": {},
    "source": [
-    "# Install Ollama\n",
-    "!curl -fsSL https://ollama.com/install.sh | sh"
+    "# Install Ollama
+",
+    "!curl -fsSL https://ollama.com/install.sh  | sh"
    ]
   },
   {
@@ -70,10 +66,14 @@ jobs:
    "execution_count": null,
    "metadata": {},
    "source": [
-    "# Start Ollama server in background\n",
-    "!nohup ollama serve > ollama.log 2>&1 &\n",
-    "import time\n",
-    "print(\"Waiting for Ollama server to start...\")\n",
+    "# Start Ollama server in background
+",
+    "!nohup ollama serve > ollama.log 2>&1 &
+",
+    "import time
+",
+    "print(\"Waiting for Ollama server to start...\")
+",
     "time.sleep(10)"
    ]
   },
@@ -82,7 +82,8 @@ jobs:
    "execution_count": null,
    "metadata": {},
    "source": [
-    "# Pull Qwen3 14B model\n",
+    "# Pull Qwen3 14B model
+",
     "!ollama pull qwen3:14b"
    ]
   },
@@ -91,24 +92,41 @@ jobs:
    "execution_count": null,
    "metadata": {},
    "source": [
-    "# Setup ngrok tunnel to expose Ollama API\n",
-    "from pyngrok import ngrok, conf\n",
-    "import os\n",
-    "\n",
-    "# Use ngrok auth token from environment or use default\n",
-    "ngrok_token = os.environ.get(\"NGROK_AUTHTOKEN\", \"1vgZrCA9yJDURy3OK1gNbS2G610_3CX2e2bqT4Ee88uMBk5he\")\n",
-    "conf.get_default().auth_token = ngrok_token\n",
-    "\n",
-    "# Start ngrok tunnel on port 11434 (Ollama's default port)\n",
-    "http_tunnel = ngrok.connect(11434, \"http\")\n",
-    "print(f\"Ollama API is now accessible at: {http_tunnel.public_url}\")\n",
-    "\n",
-    "# Save URL to file for retrieval by GitHub Actions\n",
-    "with open(\"ngrok_url.txt\", \"w\") as f:\n",
-    "    f.write(http_tunnel.public_url)\n",
-    "\n",
-    "# Keep the notebook running\n",
-    "print(\"Keeping the notebook running to maintain the tunnel. Do not interrupt.\")"
+    "# Setup ngrok tunnel to expose Ollama API
+",
+    "from pyngrok import ngrok, conf
+",
+    "import os
+",
+    "
+",
+    "# Use ngrok auth token from environment or use default
+",
+    "ngrok_token = os.environ.get(\"NGROK_AUTHTOKEN\", \"1vgZrCA9yJDURy3OK1gNbS2G610_3CX2e2bqT4Ee88uMBk5he\")
+",
+    "conf.get_default().auth_token = ngrok_token
+",
+    "
+",
+    "# Start ngrok tunnel on port 11434 (Ollama's default port)
+",
+    "http_tunnel = ngrok.connect(11434, \"http\")
+",
+    "print(f\"Ollama API is now accessible at: {http_tunnel.public_url}\")
+",
+    "
+",
+    "# Save URL to file for retrieval by GitHub Actions
+",
+    "with open(\"ngrok_url.txt\", \"w\") as f:
+",
+    "    f.write(http_tunnel.public_url)
+",
+    "
+",
+    "# Keep the notebook running
+",
+    "print(\"Keeping the notebook running to maintain the tunnel. Do not interrupt.\")
    ]
   },
   {
@@ -116,24 +134,42 @@ jobs:
    "execution_count": null,
    "metadata": {},
    "source": [
-    "# Test Ollama API\n",
-    "import requests\n",
-    "import json\n",
-    "\n",
-    "response = requests.post(\n",
-    "    \"http://localhost:11434/api/generate\",\n",
-    "    json={\n",
-    "        \"model\": \"qwen3:14b\",\n",
-    "        \"prompt\": \"Hello, how are you today?\",\n",
-    "        \"stream\": False\n",
-    "    }\n",
-    ")\n",
-    "\n",
-    "if response.status_code == 200:\n",
-    "    print(\"Ollama API is working properly!\")\n",
-    "    print(json.dumps(response.json(), indent=2))\n",
-    "else:\n",
-    "    print(f\"Error: {response.status_code}\")\n",
+    "# Test Ollama API
+",
+    "import requests
+",
+    "import json
+",
+    "
+",
+    "response = requests.post(
+",
+    "    \"http://localhost:11434/api/generate\",
+",
+    "    json={
+",
+    "        \"model\": \"qwen3:14b\",
+",
+    "        \"prompt\": \"Hello, how are you today?\",
+",
+    "        \"stream\": False
+",
+    "    }
+",
+    ")
+",
+    "
+",
+    "if response.status_code == 200:
+",
+    "    print(\"Ollama API is working properly!\")
+",
+    "    print(json.dumps(response.json(), indent=2))
+",
+    "else:
+",
+    "    print(f\"Error: {response.status_code}\")
+",
     "    print(response.text)"
    ]
   },
@@ -142,10 +178,14 @@ jobs:
    "execution_count": null,
    "metadata": {},
    "source": [
-    "# This cell will run indefinitely to keep the notebook active\n",
-    "import time\n",
-    "while True:\n",
-    "    time.sleep(60)\n",
+    "# This cell will run indefinitely to keep the notebook active
+",
+    "import time
+",
+    "while True:
+",
+    "    time.sleep(60)
+",
     "    print(\"Notebook still active, tunnel maintained...\")"
    ]
   }
@@ -174,7 +214,6 @@ jobs:
  "nbformat_minor": 4
 }
 EOF
-
           # Create kernel metadata
           cat > kernel-metadata.json << EOF
 {
@@ -191,9 +230,7 @@ EOF
   "kernel_sources": []
 }
 EOF
-          
           echo "Created Kaggle notebook and metadata"
-          
       - name: Push and Run Kaggle Notebook
         id: kaggle_push
         run: |
@@ -203,7 +240,6 @@ EOF
           kaggle kernels status ${{ env.KAGGLE_USERNAME }}/ollama-qwen3-14b-runner
           echo "Waiting for notebook to complete initialization (15 minutes)..."
           sleep 900
-
       - name: Check for Ollama API URL
         id: get_ollama_url
         run: |
@@ -211,7 +247,6 @@ EOF
           for i in {1..5}; do
             echo "Attempt $i to retrieve Ollama API URL..."
             kaggle kernels output ${{ env.KAGGLE_USERNAME }}/ollama-qwen3-14b-runner -p ./kaggle_output --force
-            
             if [ -f ./kaggle_output/ngrok_url.txt ]; then
               OLLAMA_API_URL=$(cat ./kaggle_output/ngrok_url.txt | tr -d '[:space:]')
               if [ -n "$OLLAMA_API_URL" ]; then
@@ -220,65 +255,52 @@ EOF
                 break
               fi
             fi
-            
             echo "URL not found yet, waiting 60 seconds..."
             sleep 60
           done
-          
           if [ -z "$OLLAMA_API_URL" ]; then
             echo "Failed to retrieve Ollama API URL after multiple attempts"
             exit 1
           fi
-
       - name: Clone OpenManus
         run: |
-          git clone https://github.com/openmanus-ai/OpenManus.git
+          git clone https://github.com/openmanus-ai/OpenManus.git 
           cd OpenManus
           pip install -r requirements.txt
-
       - name: Configure OpenManus for Qwen3 14B
         id: deploy_openmanus
         run: |
           cd OpenManus
-          
           # Configure OpenManus to use Qwen3 14B via Ollama API
           cat > .env << EOF
           OLLAMA_BASE_URL=${{ env.OLLAMA_API_URL }}
           OLLAMA_MODEL=qwen3:14b
           PORT=3000
           EOF
-          
           # Start OpenManus in the background
           nohup python server.py > openmanus.log 2>&1 &
           sleep 10
-          
           # Export the URL for the frontend
           echo "OPENMANUS_URL=http://localhost:3000" >> $GITHUB_OUTPUT
           echo "OpenManus started successfully at http://localhost:3000"
-          
           # Keep the logs available
           tail -f openmanus.log &
-
       - name: Setup ngrok for OpenManus
         run: |
           # Install ngrok
-          curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
-          echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list
+          curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc  | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
+          echo "deb https://ngrok-agent.s3.amazonaws.com  buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list
           sudo apt update
           sudo apt install ngrok
-          
           # Configure ngrok
           ngrok config add-authtoken ${{ env.NGROK_AUTHTOKEN }}
-          
           # Start ngrok for OpenManus
           nohup ngrok http 3000 > ngrok.log 2>&1 &
           sleep 5
-          
           # Get the public URL
           OPENMANUS_PUBLIC_URL=$(curl -s http://localhost:4040/api/tunnels | jq -r '.tunnels[0].public_url')
           echo "OPENMANUS_PUBLIC_URL=$OPENMANUS_PUBLIC_URL" >> $GITHUB_ENV
           echo "OpenManus is now available at: $OPENMANUS_PUBLIC_URL"
-
       - name: Display URLs
         run: |
           echo "===== DEPLOYMENT COMPLETE ====="
@@ -287,6 +309,5 @@ EOF
           echo "=============================="
           echo "The deployment will continue running until this workflow is stopped."
           echo "You can now access OpenManus through the public URL above."
-          
           # Keep the workflow running to maintain the services
           sleep infinity

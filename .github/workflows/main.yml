@@ -13,24 +13,20 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.10"
           cache: pip
-
       - name: Install dependencies
         run: |
           pip install kaggle requests jupyter nbformat
-
       - name: Configure Kaggle credentials
         run: |
           mkdir -p ~/.kaggle
           echo '{"username":"'"${KAGGLE_USERNAME}"'","key":"'"${KAGGLE_KEY}"'"}' > ~/.kaggle/kaggle.json
           chmod 600 ~/.kaggle/kaggle.json
           echo "Configured Kaggle credentials"
-
       - name: Create Ollama Kaggle Notebook
         run: |
           cat > ollama_kaggle_runner.ipynb << 'EOF'
@@ -59,7 +55,7 @@ jobs:
    "metadata": {},
    "source": [
     "# Install Ollama",
-    "!curl -fsSL https://ollama.com/install.sh  | sh"
+    "!curl -fsSL https://ollama.com/install.sh | sh"
    ]
   },
   {
@@ -232,7 +228,7 @@ EOF
 
       - name: Clone OpenManus
         run: |
-          git clone https://github.com/openmanus-ai/OpenManus.git 
+          git clone https://github.com/openmanus-ai/OpenManus.git
           cd OpenManus
           pip install -r requirements.txt
 
@@ -258,8 +254,8 @@ EOF
       - name: Setup ngrok for OpenManus
         run: |
           # Install ngrok
-          curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc  | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
-          echo "deb https://ngrok-agent.s3.amazonaws.com  buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list
+          curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
+          echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list
           sudo apt update
           sudo apt install ngrok
           # Configure ngrok

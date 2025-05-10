@@ -1,82 +1,114 @@
-name: SSH Server with Ngrok
+name: Run Kaggle Notebook and Expose Ollama API
 
 on:
-  workflow_dispatch:  # Permite iniciar o workflow manualmente
+  workflow_dispatch: # Permite acionamento manual
 
 jobs:
-  setup-ssh-ngrok:
+  deploy_and_run_kaggle_notebook:
     runs-on: ubuntu-latest
+    outputs:
+      ngrok_url: ${{ steps.retrieve_ngrok_url.outputs.NGROK_URL_OUTPUT }}
+    env:
+      # KAGGLE_JSON_CONTENT_USER é o conteúdo do arquivo kaggle.json fornecido pelo usuário.
+      # NGROK_AUTHTOKEN_USER é o token Ngrok fornecido pelo usuário.
+      # GH_TOKEN_PERSONAL_USER é o token pessoal do GitHub fornecido pelo usuário (atualmente não usado ativamente no workflow, mas disponível).
+      KAGGLE_JSON_CONTENT_USER: ${{ secrets.KAGGLE_JSON_CONTENT_USER }}
+      NGROK_AUTHTOKEN_USER: ${{ secrets.NGROK_AUTHTOKEN_USER }}
+      GH_TOKEN_PERSONAL_USER: ${{ secrets.GH_TOKEN_PERSONAL_USER }}
+
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
-      - name: Set up SSH server
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y openssh-server
-          sudo systemctl enable ssh
-          sudo systemctl start ssh
-          
-          # Gerar senha aleatória e armazená-la em uma variável
-          SSH_PASSWORD=$(openssl rand -base64 12)
-          
-          # Criar usuário para SSH com a senha gerada
-          sudo useradd -m -s /bin/bash sshuser
-          echo "sshuser:$SSH_PASSWORD" | sudo chpasswd
-          
-          # Adicionar usuário ao grupo sudo
-          sudo usermod -aG sudo sshuser
-          
-          # Configurar o sudoers para permitir que sshuser use sudo sem senha
-          echo "sshuser ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/sshuser
-          sudo chmod 0440 /etc/sudoers.d/sshuser
-          
-          # Configurar o SSH para permitir login de senha
-          sudo sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
-          sudo sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config
-          sudo systemctl restart ssh
-          
-          # Exibir credenciais de maneira segura
-          echo "SSH user: sshuser"
-          echo "SSH password: $SSH_PASSWORD"
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
 
-      - name: Install Ngrok
-        run: |
-          curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
-          echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list
-          sudo apt update
-          sudo apt install -y ngrok
+      - name: Install Kaggle CLI
+        run: pip install kaggle
 
-      - name: Start Ngrok
+      - name: Configure Kaggle API credentials
         run: |
-          # Configurar o token do Ngrok
-          ngrok authtoken 1vgZrCA9yJDURy3OK1gNbS2G610_3CX2e2bqT4Ee88uMBk5he
-          
-          # Iniciar o túnel SSH
-          nohup ngrok tcp 22 > ngrok.log 2>&1 &
-          
-          # Aguardar para que o túnel seja estabelecido
-          sleep 10
-          
-          # Exibir a URL do túnel
-          curl -s http://localhost:4040/api/tunnels | grep -o '"public_url":"[^"]*' | cut -d'"' -f4
+          mkdir -p ~/.kaggle
+          echo "${{ secrets.KAGGLE_JSON_CONTENT_USER }}" > ~/.kaggle/kaggle.json
+          chmod 600 ~/.kaggle/kaggle.json
 
-      - name: Keep alive
+      - name: Create kernel metadata file
+        id: kernel_meta
         run: |
-          # Manter o workflow em execução por um tempo muito longo
-          while true; do
-            echo "Keeping SSH server and Ngrok tunnel alive..."
-            sleep 300  # Verificar a cada 5 minutos
-            
-            # Verificar se o Ngrok ainda está rodando
-            if ! pgrep ngrok > /dev/null; then
-              echo "Ngrok not running, restarting..."
-              nohup ngrok tcp 22 > ngrok.log 2>&1 &
+          KAGGLE_USER=$(python -c "import json; print(json.loads('${{ secrets.KAGGLE_JSON_CONTENT_USER }}')['username'])")
+          echo "KAGGLE_USERNAME_FOR_SLUG=$KAGGLE_USER" >> "$GITHUB_ENV"
+          KERNEL_SLUG="$KAGGLE_USER/ollama-qwen3-14b-runner"
+          echo "KERNEL_SLUG_ENV=$KERNEL_SLUG" >> "$GITHUB_ENV"
+          echo "{\
+            \"id\": \"$KERNEL_SLUG\",\
+            \"title\": \"Ollama Qwen3 14B Runner\",\
+            \"code_file\": \"ollama_kaggle_runner.ipynb\",\
+            \"language\": \"python\",\
+            \"kernel_type\": \"notebook\",\
+            \"is_private\": true,\
+            \"enable_gpu\": true,\
+            \"enable_internet\": true,\
+            \"dataset_sources\": [],\
+            \"competition_sources\": [],\
+            \"kernel_sources\": []\
+          }" > kernel-metadata.json
+          echo "kernel-metadata.json created for kernel $KERNEL_SLUG"
+
+      - name: Push and run Kaggle Notebook
+        run: |
+          if [ ! -f ollama_kaggle_runner.ipynb ]; then
+            echo "ERROR: ollama_kaggle_runner.ipynb not found in the repository root."
+            echo "Please create this file (the agent will provide its content in the next steps) and commit it to your repository."
+            exit 1
+          fi
+          kaggle kernels push -p ./
+
+      - name: Wait for notebook to initialize and retrieve Ngrok URL
+        id: retrieve_ngrok_url
+        run: |
+          echo "Waiting for Kaggle notebook to start and generate Ngrok URL (this might take 5-10 minutes)..."
+          sleep 600 # 10 minutos de espera
+
+          echo "Attempting to retrieve Ngrok URL from kernel output..."
+          mkdir -p ./kaggle_output
+          if kaggle kernels output -k "${{ env.KERNEL_SLUG_ENV }}" -p ./kaggle_output --force; then
+            if [ -f ./kaggle_output/ngrok_url.txt ]; then
+              NGROK_URL=$(cat ./kaggle_output/ngrok_url.txt | tr -d '[:space:]')
+              if [ -z "$NGROK_URL" ]; then
+                echo "Error: ngrok_url.txt is empty. Kernel might have failed to start Ngrok or write the URL."
+                echo "Attempting to get kernel status and logs..."
+                kaggle kernels status "${{ env.KERNEL_SLUG_ENV }}" || echo "Failed to get kernel status."
+                kaggle kernels logs "${{ env.KERNEL_SLUG_ENV }}" || echo "Failed to get kernel logs."
+                exit 1
+              fi
+              echo "NGROK_URL_OUTPUT=$NGROK_URL" >> "$GITHUB_OUTPUT"
+              echo "Successfully retrieved Ngrok URL: $NGROK_URL"
+            else
+              echo "Error: ngrok_url.txt not found in Kaggle kernel output."
+              echo "Files in ./kaggle_output:"
+              ls -l ./kaggle_output
+              echo "Attempting to get kernel status and logs..."
+              kaggle kernels status "${{ env.KERNEL_SLUG_ENV }}" || echo "Failed to get kernel status."
+              kaggle kernels logs "${{ env.KERNEL_SLUG_ENV }}" || echo "Failed to get kernel logs."
+              exit 1
             fi
-            
-            # Verificar se o SSH ainda está rodando
-            if ! systemctl is-active ssh > /dev/null; then
-              echo "SSH server not running, restarting..."
-              sudo systemctl restart ssh
-            fi
-          done
+          else
+            echo "Error: Failed to download Kaggle kernel output."
+            echo "This could be due to the kernel not completing its run, not producing output, or an issue with the kernel slug."
+            echo "Attempting to get kernel status and logs..."
+            kaggle kernels status "${{ env.KERNEL_SLUG_ENV }}" || echo "Failed to get kernel status."
+            kaggle kernels logs "${{ env.KERNEL_SLUG_ENV }}" || echo "Failed to get kernel logs."
+            exit 1
+          fi
+        env:
+          KERNEL_SLUG_ENV: ${{ env.KERNEL_SLUG_ENV }}
+
+      - name: Display Ngrok URL (from job output)
+        run: |
+          echo "The Ngrok URL for the Ollama API should be available as a job output on the GitHub Actions summary page for this run."
+          echo "You can access it in subsequent jobs using: 
+eeds.deploy_and_run_kaggle_notebook.outputs.ngrok_url"
+          echo "For direct access in this step (if needed): ${{ steps.retrieve_ngrok_url.outputs.NGROK_URL_OUTPUT }}"
+

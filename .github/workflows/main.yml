@@ -44,30 +44,30 @@ jobs:
         run: |
           KERNEL_SLUG="${{ env.KAGGLE_USER_FOR_SLUG }}/ollama-qwen3-14b-runner"
           echo "KERNEL_SLUG_ENV=$KERNEL_SLUG" >> "$GITHUB_ENV"
-          python3 -c "
+          python3 -c '
 import json
 import os
 
-kernel_slug = os.environ['KERNEL_SLUG_ENV']
+kernel_slug = os.environ["KERNEL_SLUG_ENV"]
 metadata = {
-    'id': kernel_slug,
-    'title': 'Ollama Qwen3 14B Runner',
-    'code_file': 'ollama_kaggle_runner.ipynb',
-    'language': 'python',
-    'kernel_type': 'notebook',
-    'is_private': True,
-    'enable_gpu': True,
-    'enable_internet': True,
-    'dataset_sources': [],
-    'competition_sources': [],
-    'kernel_sources': []
+    "id": kernel_slug,
+    "title": "Ollama Qwen3 14B Runner",
+    "code_file": "ollama_kaggle_runner.ipynb",
+    "language": "python",
+    "kernel_type": "notebook",
+    "is_private": True,
+    "enable_gpu": True,
+    "enable_internet": True,
+    "dataset_sources": [],
+    "competition_sources": [],
+    "kernel_sources": []
 }
 
-with open('kernel-metadata.json', 'w') as f:
+with open("kernel-metadata.json", "w") as f:
     json.dump(metadata, f, indent=2)
 
-print(f'kernel-metadata.json created for kernel {kernel_slug} using Python json.dump')
-"
+print(f"kernel-metadata.json created for kernel {kernel_slug} using Python json.dump")
+'
           echo "Debug: Contents of kernel-metadata.json:"
           cat kernel-metadata.json
           echo # For a new line in the log
@@ -127,6 +127,5 @@ print(f'kernel-metadata.json created for kernel {kernel_slug} using Python json.
       - name: Display Ngrok URL (from job output)
         run: |
           echo "The Ngrok URL for the Ollama API should be available as a job output on the GitHub Actions summary page for this run."
-          echo "You can access it in subsequent jobs using: ${{ needs.deploy_and_run_kaggle_notebook.outputs.ngrok_url }}"
+          echo "You can access it in subsequent jobs using: \${{ needs.deploy_and_run_kaggle_notebook.outputs.ngrok_url }}"
           echo "For direct access in this step (if needed): ${{ steps.retrieve_ngrok_url.outputs.NGROK_URL_OUTPUT }}"
-          

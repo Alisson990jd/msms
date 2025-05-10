@@ -31,7 +31,7 @@ jobs:
       - name: Configure Kaggle API credentials
         run: |
           mkdir -p ~/.kaggle
-          printf "%s" "${{ secrets.KAGGLE_JSON_CONTENT_USER }}" > ~/.kaggle/kaggle.json
+          printf "%s" '{"username":"bgzinn","key":"55824846e3fff4618538582c58e4969a"}' > ~/.kaggle/kaggle.json
           chmod 600 ~/.kaggle/kaggle.json
           echo "Debug: Contents of ~/.kaggle/kaggle.json:"
           cat ~/.kaggle/kaggle.json

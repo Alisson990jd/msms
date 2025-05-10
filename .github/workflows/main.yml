@@ -109,7 +109,7 @@ jobs:
 
     "",
     "# Keep the notebook running",
-    "print('Keeping the notebook running to maintain the tunnel. Do not interrupt.')"
+    "print('Keeping the notebook running to maintain the tunnel. Do not interrupt.')'"
    ]
   },
   {

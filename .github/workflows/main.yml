@@ -1,101 +1,292 @@
-name: Run Kaggle Notebook and Expose Ollama API
+name: Deploy Qwen3 14B with OpenManus
 
 on:
-  workflow_dispatch: # Permite acionamento manual
+  workflow_dispatch:
 
 jobs:
-  deploy_and_run_kaggle_notebook:
+  deploy_ollama_and_openmanus:
     runs-on: ubuntu-latest
     outputs:
-      ngrok_url: ${{ steps.retrieve_ngrok_url.outputs.NGROK_URL_OUTPUT }}
+      openmanus_url: ${{ steps.deploy_openmanus.outputs.OPENMANUS_URL }}
     env:
-      NGROK_AUTHTOKEN_USER: ${{ secrets.NGROK_AUTHTOKEN_USER }}
-      KAGGLE_USER_FOR_SLUG: "bgzinn"
+      NGROK_AUTHTOKEN: "1vgZrCA9yJDURy3OK1gNbS2G610_3CX2e2bqT4Ee88uMBk5he"
+      KAGGLE_USERNAME: "bgzinn"
+      KAGGLE_KEY: "55824846e3fff4618538582c58e4969a"
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.9'
+          python-version: "3.10"
+          cache: pip
 
-      - name: Install Kaggle CLI
-        run: pip install kaggle
+      - name: Install dependencies
+        run: |
+          pip install kaggle requests jupyter nbformat
 
-      - name: Configure Kaggle API credentials
+      - name: Configure Kaggle credentials
         run: |
           mkdir -p ~/.kaggle
-          printf "%s" '{"username":"bgzinn","key":"55824846e3fff4618538582c58e4969a"}' > ~/.kaggle/kaggle.json
+          echo "{\"username\":\"${{ env.KAGGLE_USERNAME }}\",\"key\":\"${{ env.KAGGLE_KEY }}\"}" > ~/.kaggle/kaggle.json
           chmod 600 ~/.kaggle/kaggle.json
+          echo "Configured Kaggle credentials"
 
-      - name: Create kernel metadata file
-        id: kernel_meta
+      - name: Create Ollama Kaggle Notebook
         run: |
-          KERNEL_SLUG="${{ env.KAGGLE_USER_FOR_SLUG }}/ollama-qwen3-14b-runner"
-          echo "KERNEL_SLUG_ENV=$KERNEL_SLUG" >> "$GITHUB_ENV"
-          cat > create_metadata.py << 'EOF'
-import json
-import os
-
-kernel_slug = os.environ['KERNEL_SLUG_ENV']
-metadata = {
-    'id': kernel_slug,
-    'title': 'Ollama Qwen3 14B Runner',
-    'code_file': 'ollama_kaggle_runner.ipynb',
-    'language': 'python',
-    'kernel_type': 'notebook',
-    'is_private': True,
-    'enable_gpu': True,
-    'enable_internet': True,
-    'dataset_sources': [],
-    'competition_sources': [],
-    'kernel_sources': []
+          cat > ollama_kaggle_runner.ipynb << 'EOF'
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# Ollama Qwen3 14B Runner\n",
+    "This notebook sets up Ollama with Qwen3 14B model and exposes it via ngrok."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "source": [
+    "# Install required packages\n",
+    "!pip install pyngrok requests"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "source": [
+    "# Install Ollama\n",
+    "!curl -fsSL https://ollama.com/install.sh | sh"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "source": [
+    "# Start Ollama server in background\n",
+    "!nohup ollama serve > ollama.log 2>&1 &\n",
+    "import time\n",
+    "print(\"Waiting for Ollama server to start...\")\n",
+    "time.sleep(10)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "source": [
+    "# Pull Qwen3 14B model\n",
+    "!ollama pull qwen3:14b"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "source": [
+    "# Setup ngrok tunnel to expose Ollama API\n",
+    "from pyngrok import ngrok, conf\n",
+    "import os\n",
+    "\n",
+    "# Use ngrok auth token from environment or use default\n",
+    "ngrok_token = os.environ.get(\"NGROK_AUTHTOKEN\", \"1vgZrCA9yJDURy3OK1gNbS2G610_3CX2e2bqT4Ee88uMBk5he\")\n",
+    "conf.get_default().auth_token = ngrok_token\n",
+    "\n",
+    "# Start ngrok tunnel on port 11434 (Ollama's default port)\n",
+    "http_tunnel = ngrok.connect(11434, \"http\")\n",
+    "print(f\"Ollama API is now accessible at: {http_tunnel.public_url}\")\n",
+    "\n",
+    "# Save URL to file for retrieval by GitHub Actions\n",
+    "with open(\"ngrok_url.txt\", \"w\") as f:\n",
+    "    f.write(http_tunnel.public_url)\n",
+    "\n",
+    "# Keep the notebook running\n",
+    "print(\"Keeping the notebook running to maintain the tunnel. Do not interrupt.\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "source": [
+    "# Test Ollama API\n",
+    "import requests\n",
+    "import json\n",
+    "\n",
+    "response = requests.post(\n",
+    "    \"http://localhost:11434/api/generate\",\n",
+    "    json={\n",
+    "        \"model\": \"qwen3:14b\",\n",
+    "        \"prompt\": \"Hello, how are you today?\",\n",
+    "        \"stream\": False\n",
+    "    }\n",
+    ")\n",
+    "\n",
+    "if response.status_code == 200:\n",
+    "    print(\"Ollama API is working properly!\")\n",
+    "    print(json.dumps(response.json(), indent=2))\n",
+    "else:\n",
+    "    print(f\"Error: {response.status_code}\")\n",
+    "    print(response.text)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "source": [
+    "# This cell will run indefinitely to keep the notebook active\n",
+    "import time\n",
+    "while True:\n",
+    "    time.sleep(60)\n",
+    "    print(\"Notebook still active, tunnel maintained...\")"
+   ]
+  }
+ ],
+ "metadata": {
+  "accelerator": "GPU",
+  "kernelspec": {
+   "display_name": "Python 3",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.10.12"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 4
 }
-
-with open('kernel-metadata.json', 'w') as f:
-    json.dump(metadata, f, indent=2)
-
-print(f'kernel-metadata.json created for kernel {kernel_slug} using Python json.dump')
 EOF
-          python3 create_metadata.py
-          echo "Debug: Contents of kernel-metadata.json:"
-          cat kernel-metadata.json
 
-      - name: Push and run Kaggle Notebook
+          # Create kernel metadata
+          cat > kernel-metadata.json << EOF
+{
+  "id": "${{ env.KAGGLE_USERNAME }}/ollama-qwen3-14b-runner",
+  "title": "Ollama Qwen3 14B Runner",
+  "code_file": "ollama_kaggle_runner.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "dataset_sources": [],
+  "competition_sources": [],
+  "kernel_sources": []
+}
+EOF
+          
+          echo "Created Kaggle notebook and metadata"
+          
+      - name: Push and Run Kaggle Notebook
+        id: kaggle_push
         run: |
-          if [ ! -f ollama_kaggle_runner.ipynb ]; then
-            echo "ERROR: ollama_kaggle_runner.ipynb not found in the repository root."
-            exit 1
-          fi
           kaggle kernels push -p ./
+          echo "Pushed Kaggle kernel, waiting for it to start..."
+          sleep 60
+          kaggle kernels status ${{ env.KAGGLE_USERNAME }}/ollama-qwen3-14b-runner
+          echo "Waiting for notebook to complete initialization (15 minutes)..."
+          sleep 900
 
-      - name: Wait for notebook to initialize and retrieve Ngrok URL
-        id: retrieve_ngrok_url
+      - name: Check for Ollama API URL
+        id: get_ollama_url
         run: |
-          echo "Waiting for Kaggle notebook to start and generate Ngrok URL (this might take 10-15 minutes)..."
-          sleep 900 # 15 minutos de espera
-          echo "Attempting to retrieve Ngrok URL from kernel output..."
           mkdir -p ./kaggle_output
-          for i in {1..3}
-          do
-            echo "Attempt $i to download kernel output..."
-            if kaggle kernels output -k "${{ env.KERNEL_SLUG_ENV }}" -p ./kaggle_output --force; then
-              if [ -f ./kaggle_output/ngrok_url.txt ]; then
-                NGROK_URL=$(cat ./kaggle_output/ngrok_url.txt | tr -d '[:space:]')
-                if [ -n "$NGROK_URL" ]; then
-                  echo "NGROK_URL_OUTPUT=$NGROK_URL" >> "$GITHUB_OUTPUT"
-                  echo "Successfully retrieved Ngrok URL: $NGROK_URL"
-                  exit 0
-                fi
+          for i in {1..5}; do
+            echo "Attempt $i to retrieve Ollama API URL..."
+            kaggle kernels output ${{ env.KAGGLE_USERNAME }}/ollama-qwen3-14b-runner -p ./kaggle_output --force
+            
+            if [ -f ./kaggle_output/ngrok_url.txt ]; then
+              OLLAMA_API_URL=$(cat ./kaggle_output/ngrok_url.txt | tr -d '[:space:]')
+              if [ -n "$OLLAMA_API_URL" ]; then
+                echo "OLLAMA_API_URL=$OLLAMA_API_URL" >> $GITHUB_ENV
+                echo "Found Ollama API URL: $OLLAMA_API_URL"
+                break
               fi
             fi
+            
+            echo "URL not found yet, waiting 60 seconds..."
             sleep 60
           done
-          echo "Error: Failed to retrieve Ngrok URL after multiple attempts."
-        env:
-          KERNEL_SLUG_ENV: ${{ env.KERNEL_SLUG_ENV }}
+          
+          if [ -z "$OLLAMA_API_URL" ]; then
+            echo "Failed to retrieve Ollama API URL after multiple attempts"
+            exit 1
+          fi
 
-      - name: Display Ngrok URL
-        run: echo "For direct access in this step (if needed): ${{ steps.retrieve_ngrok_url.outputs.NGROK_URL_OUTPUT }}"
+      - name: Clone OpenManus
+        run: |
+          git clone https://github.com/openmanus-ai/OpenManus.git
+          cd OpenManus
+          pip install -r requirements.txt
+
+      - name: Configure OpenManus for Qwen3 14B
+        id: deploy_openmanus
+        run: |
+          cd OpenManus
+          
+          # Configure OpenManus to use Qwen3 14B via Ollama API
+          cat > .env << EOF
+          OLLAMA_BASE_URL=${{ env.OLLAMA_API_URL }}
+          OLLAMA_MODEL=qwen3:14b
+          PORT=3000
+          EOF
+          
+          # Start OpenManus in the background
+          nohup python server.py > openmanus.log 2>&1 &
+          sleep 10
+          
+          # Export the URL for the frontend
+          echo "OPENMANUS_URL=http://localhost:3000" >> $GITHUB_OUTPUT
+          echo "OpenManus started successfully at http://localhost:3000"
+          
+          # Keep the logs available
+          tail -f openmanus.log &
+
+      - name: Setup ngrok for OpenManus
+        run: |
+          # Install ngrok
+          curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
+          echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list
+          sudo apt update
+          sudo apt install ngrok
+          
+          # Configure ngrok
+          ngrok config add-authtoken ${{ env.NGROK_AUTHTOKEN }}
+          
+          # Start ngrok for OpenManus
+          nohup ngrok http 3000 > ngrok.log 2>&1 &
+          sleep 5
+          
+          # Get the public URL
+          OPENMANUS_PUBLIC_URL=$(curl -s http://localhost:4040/api/tunnels | jq -r '.tunnels[0].public_url')
+          echo "OPENMANUS_PUBLIC_URL=$OPENMANUS_PUBLIC_URL" >> $GITHUB_ENV
+          echo "OpenManus is now available at: $OPENMANUS_PUBLIC_URL"
+
+      - name: Display URLs
+        run: |
+          echo "===== DEPLOYMENT COMPLETE ====="
+          echo "Ollama API (Qwen3 14B): ${{ env.OLLAMA_API_URL }}"
+          echo "OpenManus Public URL: ${{ env.OPENMANUS_PUBLIC_URL }}"
+          echo "=============================="
+          echo "The deployment will continue running until this workflow is stopped."
+          echo "You can now access OpenManus through the public URL above."
+          
+          # Keep the workflow running to maintain the services
+          sleep infinity

@@ -40,16 +40,38 @@ jobs:
       - name: Create kernel metadata file
         id: kernel_meta
         env:
-          KAGGLE_JSON_SECRET: ${{ secrets.KAGGLE_JSON_CONTENT_USER }}
-        run: |
-          KAGGLE_USER=$(python -c "import os, json; print(json.loads(os.environ['KAGGLE_JSON_SECRET'])['username'])")
+          KAGGLE_JSON_SECRET: ${{ secrets.KAGGLE_JSON_CONTENT_USER }}        run: |
+          KAGGLE_USER=$(python -c "import os, json; print(json.loads(os.environ["KAGGLE_JSON_SECRET"])["username"])")
           echo "KAGGLE_USERNAME_FOR_SLUG=$KAGGLE_USER" >> "$GITHUB_ENV"
           KERNEL_SLUG="$KAGGLE_USER/ollama-qwen3-14b-runner"
           echo "KERNEL_SLUG_ENV=$KERNEL_SLUG" >> "$GITHUB_ENV"
-          printf '%s' "{\
-            \"id\": \"$KERNEL_SLUG\",\
-            \"title\": \"Ollama Qwen3 14B Runner\",\
-            \"code_file\": \"ollama_kaggle_runner.ipynb\",\
+          python -c "
+import json
+import os
+
+kernel_slug = os.environ["KERNEL_SLUG_ENV"]
+metadata = {
+    \"id\": kernel_slug,
+    \"title\": \"Ollama Qwen3 14B Runner\",
+    \"code_file\": \"ollama_kaggle_runner.ipynb\",
+    \"language\": \"python\",
+    \"kernel_type\": \"notebook\",
+    \"is_private\": True,
+    \"enable_gpu\": True,
+    \"enable_internet\": True,
+    \"dataset_sources\": [],
+    \"competition_sources\": [],
+    \"kernel_sources\": []
+}
+
+with open(\"kernel-metadata.json\", \"w\") as f:
+    json.dump(metadata, f, indent=2)
+
+print(f\"kernel-metadata.json created for kernel {kernel_slug} using Python json.dump\")
+          "
+          echo "Debug: Contents of kernel-metadata.json:"
+          cat kernel-metadata.json
+          echo # For a new line in the log       \"code_file\": \"ollama_kaggle_runner.ipynb\",\
             \"language\": \"python\",\
             \"kernel_type\": \"notebook\",\
             \"is_private\": true,\

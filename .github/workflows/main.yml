@@ -127,7 +127,6 @@ print(f'kernel-metadata.json created for kernel {kernel_slug} using Python json.
       - name: Display Ngrok URL (from job output)
         run: |
           echo "The Ngrok URL for the Ollama API should be available as a job output on the GitHub Actions summary page for this run."
-          echo "You can access it in subsequent jobs using: 
-eeds.deploy_and_run_kaggle_notebook.outputs.ngrok_url"
+          echo "You can access it in subsequent jobs using: ${{ needs.deploy_and_run_kaggle_notebook.outputs.ngrok_url }}"
           echo "For direct access in this step (if needed): ${{ steps.retrieve_ngrok_url.outputs.NGROK_URL_OUTPUT }}"
-
+          

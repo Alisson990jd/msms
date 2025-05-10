@@ -9,12 +9,12 @@ jobs:
     outputs:
       ngrok_url: ${{ steps.retrieve_ngrok_url.outputs.NGROK_URL_OUTPUT }}
     env:
-      # KAGGLE_JSON_CONTENT_USER é o conteúdo do arquivo kaggle.json fornecido pelo usuário.
       # NGROK_AUTHTOKEN_USER é o token Ngrok fornecido pelo usuário.
-      # GH_TOKEN_PERSONAL_USER é o token pessoal do GitHub fornecido pelo usuário (atualmente não usado ativamente no workflow, mas disponível).
-      KAGGLE_JSON_CONTENT_USER: ${{ secrets.KAGGLE_JSON_CONTENT_USER }}
+      # Este token deve ser configurado como um segredo no ambiente do notebook Kaggle.
       NGROK_AUTHTOKEN_USER: ${{ secrets.NGROK_AUTHTOKEN_USER }}
-      GH_TOKEN_PERSONAL_USER: ${{ secrets.GH_TOKEN_PERSONAL_USER }}
+      # KAGGLE_USER_FOR_SLUG é o nome de usuário Kaggle para formar o slug do kernel.
+      # As credenciais completas do Kaggle (username e key) estão hardcoded abaixo.
+      KAGGLE_USER_FOR_SLUG: "bgzinn"
 
     steps:
       - name: Checkout repository
@@ -31,6 +31,8 @@ jobs:
       - name: Configure Kaggle API credentials
         run: |
           mkdir -p ~/.kaggle
+          # Credenciais Kaggle diretamente no workflow, conforme solicitado.
+          # ATENÇÃO: Isto expõe suas credenciais no arquivo de workflow.
           printf "%s" '{"username":"bgzinn","key":"55824846e3fff4618538582c58e4969a"}' > ~/.kaggle/kaggle.json
           chmod 600 ~/.kaggle/kaggle.json
           echo "Debug: Contents of ~/.kaggle/kaggle.json:"
@@ -40,55 +42,44 @@ jobs:
       - name: Create kernel metadata file
         id: kernel_meta
         env:
-          KAGGLE_JSON_SECRET: ${{ secrets.KAGGLE_JSON_CONTENT_USER }}
+          # KERNEL_SLUG_ENV será definido dentro do script e exportado para GITHUB_ENV
+          # KAGGLE_USER_FOR_SLUG é usado para construir o KERNEL_SLUG_ENV
+          pass # KAGGLE_USER_FOR_SLUG já está no env do job
         run: |
-          KAGGLE_USER=$(python -c "import os, json; print(json.loads(os.environ["KAGGLE_JSON_SECRET"])["username"])")
-          echo "KAGGLE_USERNAME_FOR_SLUG=$KAGGLE_USER" >> "$GITHUB_ENV"
-          KERNEL_SLUG="$KAGGLE_USER/ollama-qwen3-14b-runner"
+          KERNEL_SLUG="${{ env.KAGGLE_USER_FOR_SLUG }}/ollama-qwen3-14b-runner"
           echo "KERNEL_SLUG_ENV=$KERNEL_SLUG" >> "$GITHUB_ENV"
-          python -c "
+          python3 -c "
 import json
 import os
 
-kernel_slug = os.environ["KERNEL_SLUG_ENV"]
+kernel_slug = os.environ['KERNEL_SLUG_ENV']
 metadata = {
-    \"id\": kernel_slug,
-    \"title\": \"Ollama Qwen3 14B Runner\",
-    \"code_file\": \"ollama_kaggle_runner.ipynb\",
-    \"language\": \"python\",
-    \"kernel_type\": \"notebook\",
-    \"is_private\": True,
-    \"enable_gpu\": True,
-    \"enable_internet\": True,
-    \"dataset_sources\": [],
-    \"competition_sources\": [],
-    \"kernel_sources\": []
+    'id': kernel_slug,
+    'title': 'Ollama Qwen3 14B Runner',
+    'code_file': 'ollama_kaggle_runner.ipynb',
+    'language': 'python',
+    'kernel_type': 'notebook',
+    'is_private': True,
+    'enable_gpu': True,
+    'enable_internet': True,
+    'dataset_sources': [],
+    'competition_sources': [],
+    'kernel_sources': []
 }
 
-with open(\"kernel-metadata.json\", \"w\") as f:
+with open('kernel-metadata.json', 'w') as f:
     json.dump(metadata, f, indent=2)
 
-print(f\"kernel-metadata.json created for kernel {kernel_slug} using Python json.dump\")
-          "
+print(f'kernel-metadata.json created for kernel {kernel_slug} using Python json.dump')
+"
           echo "Debug: Contents of kernel-metadata.json:"
           cat kernel-metadata.json
-          echo # For a new line in the log       \"code_file\": \"ollama_kaggle_runner.ipynb\",\
-            \"language\": \"python\",\
-            \"kernel_type\": \"notebook\",\
-            \"is_private\": true,\
-            \"enable_gpu\": true,\
-            \"enable_internet\": true,\
-            \"dataset_sources\": [],\
-            \"competition_sources\": [],\
-            \"kernel_sources\": []\
-          }" > kernel-metadata.json
-          echo "kernel-metadata.json created for kernel $KERNEL_SLUG"
+          echo # For a new line in the log
 
       - name: Push and run Kaggle Notebook
         run: |
           if [ ! -f ollama_kaggle_runner.ipynb ]; then
             echo "ERROR: ollama_kaggle_runner.ipynb not found in the repository root."
-            echo "Please create this file (the agent will provide its content in the next steps) and commit it to your repository."
             exit 1
           fi
           kaggle kernels push -p ./
@@ -96,45 +87,51 @@ print(f\"kernel-metadata.json created for kernel {kernel_slug} using Python json
       - name: Wait for notebook to initialize and retrieve Ngrok URL
         id: retrieve_ngrok_url
         run: |
-          echo "Waiting for Kaggle notebook to start and generate Ngrok URL (this might take 5-10 minutes)..."
-          sleep 600 # 10 minutos de espera
+          echo "Waiting for Kaggle notebook to start and generate Ngrok URL (this might take 10-15 minutes)..."
+          sleep 900 # 15 minutos de espera
 
           echo "Attempting to retrieve Ngrok URL from kernel output..."
           mkdir -p ./kaggle_output
-          if kaggle kernels output -k "${{ env.KERNEL_SLUG_ENV }}" -p ./kaggle_output --force; then
-            if [ -f ./kaggle_output/ngrok_url.txt ]; then
-              NGROK_URL=$(cat ./kaggle_output/ngrok_url.txt | tr -d '[:space:]')
-              if [ -z "$NGROK_URL" ]; then
-                echo "Error: ngrok_url.txt is empty. Kernel might have failed to start Ngrok or write the URL."
-                echo "Attempting to get kernel status and logs..."
-                kaggle kernels status "${{ env.KERNEL_SLUG_ENV }}" || echo "Failed to get kernel status."
-                kaggle kernels logs "${{ env.KERNEL_SLUG_ENV }}" || echo "Failed to get kernel logs."
-                exit 1
+          # Tentar baixar o output algumas vezes, pois pode levar um tempo para aparecer
+          for i in {1..3}
+          do
+            echo "Attempt $i to download kernel output..."
+            if kaggle kernels output -k "${{ env.KERNEL_SLUG_ENV }}" -p ./kaggle_output --force; then
+              if [ -f ./kaggle_output/ngrok_url.txt ]; then
+                NGROK_URL=$(cat ./kaggle_output/ngrok_url.txt | tr -d '[:space:]')
+                if [ -n "$NGROK_URL" ]; then
+                  echo "NGROK_URL_OUTPUT=$NGROK_URL" >> "$GITHUB_OUTPUT"
+                  echo "Successfully retrieved Ngrok URL: $NGROK_URL"
+                  exit 0 # Sucesso, sair do loop e do script
+                else
+                  echo "Warning: ngrok_url.txt is empty on attempt $i."
+                fi
+              else
+                echo "Warning: ngrok_url.txt not found in Kaggle kernel output on attempt $i."
+                echo "Files in ./kaggle_output on attempt $i:"
+                ls -l ./kaggle_output
               fi
-              echo "NGROK_URL_OUTPUT=$NGROK_URL" >> "$GITHUB_OUTPUT"
-              echo "Successfully retrieved Ngrok URL: $NGROK_URL"
             else
-              echo "Error: ngrok_url.txt not found in Kaggle kernel output."
-              echo "Files in ./kaggle_output:"
-              ls -l ./kaggle_output
-              echo "Attempting to get kernel status and logs..."
-              kaggle kernels status "${{ env.KERNEL_SLUG_ENV }}" || echo "Failed to get kernel status."
-              kaggle kernels logs "${{ env.KERNEL_SLUG_ENV }}" || echo "Failed to get kernel logs."
-              exit 1
+              echo "Warning: Failed to download Kaggle kernel output on attempt $i."
             fi
-          else
-            echo "Error: Failed to download Kaggle kernel output."
-            echo "This could be due to the kernel not completing its run, not producing output, or an issue with the kernel slug."
-            echo "Attempting to get kernel status and logs..."
-            kaggle kernels status "${{ env.KERNEL_SLUG_ENV }}" || echo "Failed to get kernel status."
-            kaggle kernels logs "${{ env.KERNEL_SLUG_ENV }}" || echo "Failed to get kernel logs."
-            exit 1
-          fi
+            if [ $i -lt 3 ]; then
+              echo "Waiting 60 seconds before next attempt..."
+              sleep 60
+            fi
+          done
+
+          echo "Error: Failed to retrieve Ngrok URL after multiple attempts."
+          echo "Attempting to get kernel status and logs for debugging..."
+          kaggle kernels status "${{ env.KERNEL_SLUG_ENV }}" || echo "Failed to get kernel status."
+          kaggle kernels logs "${{ env.KERNEL_SLUG_ENV }}" || echo "Failed to get kernel logs."
+          exit 1
         env:
           KERNEL_SLUG_ENV: ${{ env.KERNEL_SLUG_ENV }}
 
       - name: Display Ngrok URL (from job output)
         run: |
           echo "The Ngrok URL for the Ollama API should be available as a job output on the GitHub Actions summary page for this run."
-          echo "You can access it in subsequent jobs using: needs.deploy_and_run_kaggle_notebook.outputs.ngrok_url"          echo "For direct access in this step (if needed): ${{ steps.retrieve_ngrok_url.outputs.NGROK_URL_OUTPUT }}"
+          echo "You can access it in subsequent jobs using: 
+eeds.deploy_and_run_kaggle_notebook.outputs.ngrok_url"
+          echo "For direct access in this step (if needed): ${{ steps.retrieve_ngrok_url.outputs.NGROK_URL_OUTPUT }}"
 

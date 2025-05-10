@@ -87,25 +87,21 @@ jobs:
     "# Setup ngrok tunnel to expose Ollama API",
     "from pyngrok import ngrok, conf",
     "import os",
-
     "",
     "# Use ngrok auth token from environment or use default",
     "ngrok_token = os.environ.get('NGROK_AUTHTOKEN', '1vgZrCA9yJDURy3OK1gNbS2G610_3CX2e2bqT4Ee88uMBk5he')",
     "conf.get_default().auth_token = ngrok_token",
-
     "",
     "# Start ngrok tunnel on port 11434 (Ollama's default port)",
     "http_tunnel = ngrok.connect(11434, 'http')",
     "print(f\"Ollama API is now accessible at: {http_tunnel.public_url}\")",
-
     "",
     "# Save URL to file for retrieval by GitHub Actions",
     "with open('ngrok_url.txt', 'w') as f:",
     "    f.write(http_tunnel.public_url)",
-
     "",
     "# Keep the notebook running",
-    "print('Keeping the notebook running to maintain the tunnel. Do not interrupt.')'"
+    "print('Keeping the notebook running to maintain the tunnel. Do not interrupt.')"
    ]
   },
   {
@@ -116,7 +112,6 @@ jobs:
     "# Test Ollama API",
     "import requests",
     "import json",
-
     "",
     "try:",
     "    response = requests.post(",
